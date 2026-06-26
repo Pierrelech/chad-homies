@@ -1,0 +1,26 @@
+version: '3.8'
+
+# Compose de développement : uniquement PostgreSQL
+# L'app Next.js tourne avec "npm run dev" en local
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: chad_homies_db_dev
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: chad_homies
+    volumes:
+      - postgres_dev_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  postgres_dev_data:

@@ -1,0 +1,462 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── ENUMS ───────────────────────────────────────────────────────────────────
+
+enum Role {
+  USER
+  MODERATOR
+  ADMIN
+  SUPER_ADMIN
+}
+
+enum HistoryType {
+  NEWS
+  FIGHT
+  MANUAL
+  SEASON_RESET
+}
+
+enum NotificationType {
+  POINTS_GAINED
+  POINTS_LOST
+  NEWS_MENTION
+  FIGHT_SELECTED
+  FIGHT_RESULT
+  BADGE_EARNED
+  ACHIEVEMENT_UNLOCKED
+}
+
+enum FightStatus {
+  PENDING
+  ACTIVE
+  CLOSED
+  RESOLVED
+}
+
+enum NewsStatus {
+  DRAFT
+  VOTING
+  CLOSED
+  APPLIED
+}
+
+enum RedistributionMode {
+  EQUAL
+  RANDOM
+  WEIGHTED
+}
+
+enum BadgeType {
+  RANK
+  STREAK
+  SOCIAL
+  SPECIAL
+}
+
+// ─── USERS & AUTH ─────────────────────────────────────────────────────────────
+
+model User {
+  id            String    @id @default(cuid())
+  email         String?   @unique
+  emailVerified DateTime?
+  username      String    @unique
+  displayName   String
+  image         String?
+  bio           String?
+  passwordHash  String?
+  role          Role      @default(USER)
+  isSystem      Boolean   @default(false)
+  banned        Boolean   @default(false)
+  banReason     String?
+  elo           Int       @default(1000)
+
+  level        Int @default(1)
+  xp           Int @default(0)
+  winStreak    Int @default(0)
+  maxWinStreak Int @default(0)
+  bestRank     Int?
+  worstRank    Int?
+  totalGained  Int @default(0)
+  totalLost    Int @default(0)
+  fightsWon    Int @default(0)
+  fightsLost   Int @default(0)
+
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  lastSeenAt DateTime @default(now())
+
+  accounts         Account[]
+  sessions         Session[]
+  history          PointHistory[]
+  newsVotes        NewsVote[]
+  fightVotes       FightVote[]
+  notifications    Notification[]
+  badges           UserBadge[]
+  achievements     UserAchievement[]
+  fightTeamMembers FightTeamMember[]
+  newsParticipants NewsParticipant[]
+  quotesAbout      Quote[]            @relation("QuoteSubject")
+  galleryAppearances GalleryMedia[]   @relation("MediaSubject")
+  seasonStats      SeasonUserStat[]
+  auditLogs        AuditLog[]
+
+  @@index([elo])
+  @@index([username])
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model PasswordResetToken {
+  id        String   @id @default(cuid())
+  email     String
+  token     String   @unique
+  expires   DateTime
+  createdAt DateTime @default(now())
+}
+
+// ─── NEWS ─────────────────────────────────────────────────────────────────────
+
+model News {
+  id       String     @id @default(cuid())
+  title    String
+  content  String     @db.Text
+  imageUrl String?
+  authorId String
+  status   NewsStatus @default(DRAFT)
+
+  votingEndsAt DateTime?
+  appliedAt    DateTime?
+
+  maxBonusPct      Float @default(30)
+  minVotesForBonus Int   @default(5)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  participants NewsParticipant[]
+  votes        NewsVote[]
+  history      PointHistory[]
+
+  @@index([status])
+  @@index([createdAt])
+}
+
+model NewsParticipant {
+  id           String  @id @default(cuid())
+  newsId       String
+  userId       String
+  deltaPlanned Int
+  deltaFinal   Int?
+  reason       String
+
+  news News @relation(fields: [newsId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([newsId, userId])
+}
+
+model NewsVote {
+  id         String   @id @default(cuid())
+  newsId     String
+  userId     String
+  isPositive Boolean
+  createdAt  DateTime @default(now())
+
+  news News @relation(fields: [newsId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([newsId, userId])
+}
+
+// ─── FIGHTS ───────────────────────────────────────────────────────────────────
+
+model Fight {
+  id     String      @id @default(cuid())
+  date   DateTime    @db.Date
+  status FightStatus @default(PENDING)
+
+  teamAVotes Int @default(0)
+  teamBVotes Int @default(0)
+
+  resolvedAt DateTime?
+
+  redistributionMode RedistributionMode @default(EQUAL)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  teams   FightTeam[]
+  votes   FightVote[]
+  history PointHistory[]
+
+  @@unique([date])
+  @@index([status])
+}
+
+model FightTeam {
+  id      String @id @default(cuid())
+  fightId String
+  team    String // "A" | "B"
+
+  fight   Fight             @relation(fields: [fightId], references: [id], onDelete: Cascade)
+  members FightTeamMember[]
+
+  @@unique([fightId, team])
+}
+
+model FightTeamMember {
+  id          String @id @default(cuid())
+  fightTeamId String
+  userId      String
+
+  fightTeam FightTeam @relation(fields: [fightTeamId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([fightTeamId, userId])
+}
+
+model FightVote {
+  id        String   @id @default(cuid())
+  fightId   String
+  userId    String
+  team      String
+  createdAt DateTime @default(now())
+
+  fight Fight @relation(fields: [fightId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([fightId, userId])
+}
+
+// ─── POINT HISTORY ────────────────────────────────────────────────────────────
+
+model PointHistory {
+  id       String      @id @default(cuid())
+  userId   String
+  delta    Int
+  eloAfter Int
+  type     HistoryType
+  reason   String
+
+  newsId  String?
+  fightId String?
+  adminId String?
+
+  createdAt DateTime @default(now())
+
+  user  User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  news  News?  @relation(fields: [newsId], references: [id])
+  fight Fight? @relation(fields: [fightId], references: [id])
+
+  @@index([userId])
+  @@index([createdAt])
+}
+
+// ─── NOTIFICATIONS ────────────────────────────────────────────────────────────
+
+model Notification {
+  id      String           @id @default(cuid())
+  userId  String
+  type    NotificationType
+  title   String
+  message String
+  read    Boolean          @default(false)
+  link    String?
+
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, read])
+}
+
+// ─── GAMIFICATION ─────────────────────────────────────────────────────────────
+
+model Badge {
+  id          String    @id @default(cuid())
+  name        String    @unique
+  description String
+  imageUrl    String
+  type        BadgeType
+  condition   Json
+
+  users UserBadge[]
+}
+
+model UserBadge {
+  id       String   @id @default(cuid())
+  userId   String
+  badgeId  String
+  earnedAt DateTime @default(now())
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  badge Badge @relation(fields: [badgeId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, badgeId])
+}
+
+model Achievement {
+  id          String @id @default(cuid())
+  name        String @unique
+  description String
+  xpReward    Int
+  condition   Json
+
+  users UserAchievement[]
+}
+
+model UserAchievement {
+  id            String   @id @default(cuid())
+  userId        String
+  achievementId String
+  unlockedAt    DateTime @default(now())
+
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  achievement Achievement @relation(fields: [achievementId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, achievementId])
+}
+
+// ─── SAISONS ──────────────────────────────────────────────────────────────────
+
+model Season {
+  id        String    @id @default(cuid())
+  name      String
+  number    Int       @unique
+  startedAt DateTime
+  endedAt   DateTime?
+  isActive  Boolean   @default(false)
+
+  userStats SeasonUserStat[]
+
+  @@index([isActive])
+}
+
+model SeasonUserStat {
+  id          String @id @default(cuid())
+  seasonId    String
+  userId      String
+  finalElo    Int
+  finalRank   Int
+  fightsWon   Int    @default(0)
+  fightsLost  Int    @default(0)
+  totalGained Int    @default(0)
+  totalLost   Int    @default(0)
+
+  season Season @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([seasonId, userId])
+}
+
+// ─── BONUS ────────────────────────────────────────────────────────────────────
+
+model Quote {
+  id        String   @id @default(cuid())
+  text      String
+  subjectId String?
+  authorId  String?
+  featured  Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  subject User? @relation("QuoteSubject", fields: [subjectId], references: [id])
+}
+
+model GalleryMedia {
+  id        String   @id @default(cuid())
+  url       String
+  caption   String?
+  featured  Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  subjects User[] @relation("MediaSubject")
+}
+
+model WeeklyChallenge {
+  id          String   @id @default(cuid())
+  title       String
+  description String
+  reward      Int
+  startedAt   DateTime
+  endsAt      DateTime
+  isActive    Boolean  @default(true)
+  condition   Json
+
+  createdAt DateTime @default(now())
+}
+
+// ─── SETTINGS ─────────────────────────────────────────────────────────────────
+
+model Setting {
+  key       String   @id
+  value     Json
+  updatedAt DateTime @updatedAt
+  updatedBy String?
+}
+
+// ─── RATE LIMITING & LOGS ─────────────────────────────────────────────────────
+
+model RateLimit {
+  key     String   @id
+  count   Int      @default(1)
+  resetAt DateTime
+
+  @@index([key])
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  action    String
+  target    String?
+  targetId  String?
+  metadata  Json?
+  ip        String?
+  createdAt DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([createdAt])
+}
