@@ -48,7 +48,7 @@ export async function buildSessionCookie(userId: string, role: Role) {
   const token = await encrypt({ userId, role, expiresAt: expiresAt.toISOString() })
   const options = {
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
+    secure: (process.env.APP_URL ?? '').startsWith('https'),
     expires: expiresAt,
     sameSite: 'lax' as const,
     path: '/',
