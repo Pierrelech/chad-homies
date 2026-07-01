@@ -36,8 +36,8 @@ export async function scheduleDailyFight() {
     select: { id: true },
   })
 
-  if (users.length < 2) {
-    console.log(`[CRON] Pas assez de joueurs pour créer un combat`)
+  if (users.length < 8) {
+    console.log(`[CRON] Pas assez de joueurs pour créer un combat (${users.length}/8 requis)`)
     return
   }
 
