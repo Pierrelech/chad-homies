@@ -19,7 +19,7 @@ export async function GET() {
 
   response.cookies.set('discord_oauth_state', state, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
+    secure: (process.env.APP_URL ?? '').startsWith('https'),
     sameSite: 'lax',
     maxAge: 60 * 10,
     path: '/',
