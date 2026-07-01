@@ -106,6 +106,20 @@ export async function updateNewsAction(formData: FormData) {
   redirect('/admin/news')
 }
 
+export async function deleteNewsAction(formData: FormData) {
+  const session = await verifyAdmin()
+  const newsId = formData.get('newsId') as string
+
+  await prisma.$transaction([
+    prisma.pointHistory.updateMany({ where: { newsId }, data: { newsId: null } }),
+    prisma.news.delete({ where: { id: newsId } }),
+  ])
+
+  await logAudit(session.userId, 'DELETE_NEWS', 'News', newsId)
+  revalidatePath('/news')
+  revalidatePath('/admin/news')
+}
+
 export async function updateNewsStatusAction(formData: FormData) {
   await verifyAdmin()
   const newsId = formData.get('newsId') as string

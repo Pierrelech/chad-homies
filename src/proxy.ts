@@ -1,7 +1,7 @@
 import { type NextRequest, NextResponse } from 'next/server'
 import { decryptToken } from '@/lib/auth-edge'
 
-const PUBLIC_PATHS = ['/login', '/register', '/forgot-password', '/reset-password', '/api/auth/discord']
+const PUBLIC_PATHS = ['/login', '/register', '/forgot-password', '/reset-password', '/api/auth/discord', '/api/cron', '/uploads']
 const ADMIN_PATHS = ['/admin']
 
 export default async function proxy(req: NextRequest) {

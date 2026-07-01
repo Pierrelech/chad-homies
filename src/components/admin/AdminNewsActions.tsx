@@ -1,9 +1,9 @@
 'use client'
 
 import { useTransition } from 'react'
-import { updateNewsStatusAction, applyNewsPointsAction } from '@/app/actions/admin'
+import { updateNewsStatusAction, applyNewsPointsAction, deleteNewsAction } from '@/app/actions/admin'
 import Link from 'next/link'
-import { ExternalLink, Pencil } from 'lucide-react'
+import { ExternalLink, Pencil, Trash2 } from 'lucide-react'
 
 export function AdminNewsActions({ newsId, status }: { newsId: string; status: string }) {
   const [pending, startTransition] = useTransition()
@@ -19,6 +19,13 @@ export function AdminNewsActions({ newsId, status }: { newsId: string; status: s
     const fd = new FormData()
     fd.set('newsId', newsId)
     startTransition(async () => { await applyNewsPointsAction(fd) })
+  }
+
+  function deleteNews() {
+    if (!confirm('Supprimer cette news définitivement ?')) return
+    const fd = new FormData()
+    fd.set('newsId', newsId)
+    startTransition(async () => { await deleteNewsAction(fd) })
   }
 
   return (
@@ -40,6 +47,14 @@ export function AdminNewsActions({ newsId, status }: { newsId: string; status: s
           <Pencil size={14} />
         </Link>
       )}
+      <button
+        onClick={deleteNews}
+        disabled={pending}
+        className="rounded-lg p-1.5 text-white/30 hover:text-danger disabled:opacity-50"
+        title="Supprimer"
+      >
+        <Trash2 size={14} />
+      </button>
 
       {status === 'DRAFT' && (
         <button
